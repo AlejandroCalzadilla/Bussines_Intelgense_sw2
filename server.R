@@ -4,15 +4,6 @@ library(dplyr)
 library(bslib)
 library(shinydashboard)
 
-# Leer el archivo CSV
-data <- read.csv("C:/Users/ASUS/Desktop/parcialsw2/sw2_r/supermarket_sales_realistic_cleaned.csv")
-
-# Convertir la columna Fecha a un formato de fecha
-data$Fecha <- as.Date(data$Fecha, format="%Y-%m-%d")
-
-# Extraer el mes y año de la columna de fecha
-data$Mes <- format(data$Fecha, "%Y-%m")
-
 ui <- dashboardPage(
   dashboardHeader(title = "Dashboard de Ventas Supermercado"),
   dashboardSidebar(
@@ -27,13 +18,15 @@ ui <- dashboardPage(
   dashboardBody(
     fluidRow(
       box(
-        title = "Filtros",
+        title = "Cargar Archivo CSV",
         status = "primary",
         solidHeader = TRUE,
         width = 12,
-        selectInput("sucursal", "Sucursal:", choices = c("Todas", unique(data$Sucursal))),
-        selectInput("categoria", "Categoría:", choices = c("Todas", unique(data$Categoria))),
-        selectInput("mes", "Mes:", choices = c("Todos", unique(data$Mes)))
+        fileInput("file1", "Elija un archivo CSV",
+                  accept = c(
+                    "text/csv",
+                    "text/comma-separated-values,text/plain",
+                    ".csv"))
       )
     ),
     tabItems(
@@ -66,27 +59,20 @@ ui <- dashboardPage(
   )
 )
 
-# Server: Lógica de la aplicación
 server <- function(input, output) {
   
-  # Filtrar datos según las selecciones del usuario
-  filtered_data <- reactive({
-    data_filtered <- data
-    if (input$sucursal != "Todas") {
-      data_filtered <- data_filtered %>% filter(Sucursal == input$sucursal)
-    }
-    if (input$categoria != "Todas") {
-      data_filtered <- data_filtered %>% filter(Categoria == input$categoria)
-    }
-    if (input$mes != "Todos") {
-      data_filtered <- data_filtered %>% filter(Mes == input$mes)
-    }
-    data_filtered
+  # Leer el archivo CSV cargado
+  data <- reactive({
+    req(input$file1)
+    df <- read.csv(input$file1$datapath)
+    df$Fecha <- as.Date(df$Fecha, format="%Y-%m-%d")
+    df$Mes <- format(df$Fecha, "%Y-%m")
+    df
   })
   
   # Ventas Mensuales
   output$plot_ventas_mensuales <- renderPlot({
-    ventas_mensuales <- filtered_data() %>%
+    ventas_mensuales <- data() %>%
       group_by(Mes) %>%
       summarise(TotalVentas = sum(Total, na.rm = TRUE))
     
@@ -98,7 +84,7 @@ server <- function(input, output) {
   
   # Ventas por Categoría
   output$plot_ventas_categoria <- renderPlot({
-    ventas_por_categoria <- filtered_data() %>%
+    ventas_por_categoria <- data() %>%
       group_by(Categoria) %>%
       summarise(TotalVentas = sum(Total, na.rm = TRUE)) %>%
       arrange(desc(TotalVentas))
@@ -112,7 +98,7 @@ server <- function(input, output) {
   
   # Ventas por Sucursal
   output$plot_ventas_sucursal <- renderPlot({
-    ventas_por_sucursal <- filtered_data() %>%
+    ventas_por_sucursal <- data() %>%
       group_by(Sucursal) %>%
       summarise(TotalVentas = sum(Total, na.rm = TRUE)) %>%
       arrange(desc(TotalVentas))
@@ -132,7 +118,7 @@ server <- function(input, output) {
   
   # Ventas por Tipo de Pago
   output$plot_ventas_tipo_pago <- renderPlot({
-    ventas_por_tipo_pago <- filtered_data() %>%
+    ventas_por_tipo_pago <- data() %>%
       group_by(Pago) %>%
       summarise(TotalVentas = sum(Total, na.rm = TRUE)) %>%
       arrange(desc(TotalVentas))
@@ -146,14 +132,17 @@ server <- function(input, output) {
   
   # Ventas por Hora
   output$plot_ventas_hora <- renderPlot({
+    # Obtener una copia de los datos filtrados
+    data_filtered <- data()
+    
     # Convertir la columna 'Hora' a un formato adecuado
-    data$Hora <- as.POSIXct(data$Hora, format = "%H:%M:%S")
-    data <- data[!is.na(data$Hora), ]
+    data_filtered$Hora <- as.POSIXct(data_filtered$Hora, format = "%H:%M:%S")
+    data_filtered <- data_filtered[!is.na(data_filtered$Hora), ]
     
     # Extraer solo la hora para agrupar
-    data$HoraSimple <- format(data$Hora, "%H")
+    data_filtered$HoraSimple <- format(data_filtered$Hora, "%H")
     
-    ventas_por_hora <- data %>%
+    ventas_por_hora <- data_filtered %>%
       group_by(HoraSimple) %>%
       summarise(TotalVentas = sum(Total, na.rm = TRUE), NumeroClientes = n()) %>%
       arrange(desc(NumeroClientes))
